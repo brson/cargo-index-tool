@@ -1,0 +1,10 @@
+[package]
+authors = ["Brian Anderson <banderson@mozilla.com>"]
+name = "cargo-index-tool"
+version = "0.1.0"
+
+[dependencies]
+error-chain = "0.10.0"
+serde_json = "1.0.2"
+structopt = "0.0.5"
+structopt-derive = "0.0.5"
