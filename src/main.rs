@@ -1,15 +1,22 @@
 #![allow(warnings)]
 
+extern crate semver;
+extern crate walkdir;
 extern crate structopt;
 #[macro_use]
 extern crate structopt_derive;
 #[macro_use]
 extern crate error_chain;
+extern crate serde_json;
 
 use structopt::StructOpt;
 use errors::*;
 use std::path::{PathBuf, Path};
 use std::env;
+use walkdir::WalkDir;
+use serde_json::Value as JsonValue;
+use semver::{Version, VersionReq};
+use std::collections::BTreeMap;
 
 mod home;
 
@@ -29,7 +36,7 @@ struct Opt {
 
     /// An optional parameter, will be `None` if not present on the
     /// command line.
-    #[structopt(help = "The local crates.io index, from ~/.cargo if omitted")]
+    #[structopt(long = "index", help = "The local crates.io index, from ~/.cargo if omitted")]
     index: Option<String>,
 }
 
@@ -55,8 +62,19 @@ fn run() -> Result<()> {
 // The name of the cargo index directory
 const INDEX_DIR: &str = "github.com-1ecc6299db9ec823";
 
-fn default_repo() -> Option<PathBuf> {
+fn default_index() -> Option<PathBuf> {
     home::cargo_home().map(|h| h.join("registry/index").join(INDEX_DIR))
+}
+
+fn index_path(index: Option<&Path>) -> Result<PathBuf> {
+    let index = index.map(PathBuf::from).or(default_index())
+        .ok_or(Error::from("no crate index repo specified and unable to locate it ~/.cargo"))?;
+
+    if !index.exists() {
+        Err(format!("index {} does not exist", index.display()).into())
+    } else {
+        Ok(index)
+    }
 }
 
 fn print_revdeps(index: Option<&Path>) -> Result<()> {
@@ -68,12 +86,51 @@ fn print_trevdeps(index: Option<&Path>) -> Result<()> {
 }
 
 fn print_one_point_oh_crates(index: Option<&Path>) -> Result<()> {
-    panic!()
-}
-
-fn load_registry_json(index: Option<&Path>) -> Result<()> {
-    let index = index.map(PathBuf::from).or(default_repo())
-        .ok_or(Error::from("no crate index repo specified and unable to locate it ~/.cargo"))?;
+    let index = load_index(index)?;
 
     panic!()
 }
+
+fn load_index(index: Option<&Path>) -> Result<Index> {
+    let index = index_path(index)?;
+
+    for entry in WalkDir::new(index) {
+        let entry = entry.chain_err(|| "unable to read dir entry")?;
+
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        if entry.path().file_name() == Some("config.json".as_ref()) {
+            continue;
+        }
+
+        
+    }
+
+    panic!()
+}
+
+type CrateName = String;
+type FeatureName = String;
+type Index = BTreeMap<CrateName, Vec<CrateVersion>>;
+
+struct CrateVersion {
+    name: String,
+    vers: Version,
+    deps: Vec<Dep>,
+    cksum: String,
+    features: BTreeMap<FeatureName, Vec<FeatureName>>,
+    yanked: bool,
+}
+
+struct Dep {
+    name: CrateName,
+    req: VersionReq,
+    features: Vec<FeatureName>,
+    optional: bool,
+    default_features: bool,
+    target: Option<String>,
+    kind: String,
+}
+
