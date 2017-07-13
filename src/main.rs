@@ -8,19 +8,31 @@ extern crate structopt_derive;
 #[macro_use]
 extern crate error_chain;
 extern crate serde_json;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 
 use structopt::StructOpt;
 use errors::*;
 use std::path::{PathBuf, Path};
 use std::env;
-use walkdir::WalkDir;
+use walkdir::{WalkDir, DirEntry, WalkDirIterator};
 use serde_json::Value as JsonValue;
 use semver::{Version, VersionReq};
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::Read;
 
 mod home;
 
-mod errors { error_chain! { } }
+mod errors {
+    error_chain! {
+        foreign_links {
+            SerdeJson(::serde_json::Error);
+            Io(::std::io::Error);
+        }
+    }
+}
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "", about = "An example of StructOpt usage.")]
@@ -93,8 +105,19 @@ fn print_one_point_oh_crates(index: Option<&Path>) -> Result<()> {
 
 fn load_index(index: Option<&Path>) -> Result<Index> {
     let index = index_path(index)?;
+    println!("{}", index.display());
 
-    for entry in WalkDir::new(index) {
+
+    fn is_hidden(entry: &self::DirEntry) -> bool {
+        entry.file_name()
+            .to_str()
+            .map(|s| s.starts_with("."))
+            .unwrap_or(false)
+    }
+
+    let mut map = BTreeMap::new();
+    
+    for entry in WalkDir::new(index).into_iter().filter_entry(|e| !is_hidden(e)) {
         let entry = entry.chain_err(|| "unable to read dir entry")?;
 
         if !entry.file_type().is_file() {
@@ -105,16 +128,33 @@ fn load_index(index: Option<&Path>) -> Result<Index> {
             continue;
         }
 
+        let mut f = File::open(entry.path())?;
+        let mut buf = String::new();
+        f.read_to_string(&mut buf)?;
+
+        let mut vers: Vec<CrateVersion> = Vec::new();
         
+        for line in buf.lines() {
+            let ver: CrateVersion = serde_json::from_str(line)?;
+            if let Some(l) = vers.last() {
+                assert_eq!(l.name, ver.name);
+            }
+            vers.push(ver);
+        }
+
+        if let Some(name) = vers.last().map(|l| l.name.clone()) {
+            map.insert(name, vers);
+        }
     }
 
-    panic!()
+    Ok(map)
 }
 
 type CrateName = String;
 type FeatureName = String;
 type Index = BTreeMap<CrateName, Vec<CrateVersion>>;
 
+#[derive(Debug, Serialize, Deserialize)]
 struct CrateVersion {
     name: String,
     vers: Version,
@@ -124,13 +164,14 @@ struct CrateVersion {
     yanked: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 struct Dep {
     name: CrateName,
-    req: VersionReq,
+    req: String,
     features: Vec<FeatureName>,
     optional: bool,
     default_features: bool,
     target: Option<String>,
-    kind: String,
+    kind: Option<String>,
 }
 
