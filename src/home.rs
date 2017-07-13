@@ -3,13 +3,21 @@ use std::env;
 
 #[cfg(windows)]
 extern crate winapi;
+#[cfg(windows)]
+extern crate winreg;
+#[cfg(windows)]
+extern crate kernel32;
+#[cfg(windows)]
+extern crate advapi32;
+#[cfg(windows)]
+extern crate userenv;
+#[cfg(windows)]
+extern crate scopeguard;
 
 #[cfg(windows)]
 use self::winapi::DWORD;
 #[cfg(windows)]
 use std::io;
-#[cfg(windows)]
-use self::winapi::kernel32;
 
 pub fn cargo_home() -> Option<PathBuf> {
     let env_var = env::var_os("CARGO_HOME");
@@ -55,15 +63,13 @@ pub fn home_dir() -> Option<PathBuf> {
 #[cfg(windows)]
 fn home_dir_() -> Option<PathBuf> {
 
-    use self::winapi::advapi32;
-    use self::winapi::userenv;
     use std::ptr;
     use self::kernel32::{GetCurrentProcess, GetLastError, CloseHandle};
     use self::advapi32::OpenProcessToken;
     use self::userenv::GetUserProfileDirectoryW;
     use self::winapi::ERROR_INSUFFICIENT_BUFFER;
     use self::winapi::winnt::TOKEN_READ;
-    use scopeguard;
+    use self::scopeguard;
 
     ::std::env::var_os("USERPROFILE").map(PathBuf::from).or_else(|| unsafe {
         let me = GetCurrentProcess();
@@ -84,7 +90,7 @@ fn home_dir_() -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn os2path(s: &[u16]) -> PathBuf {
-    use std::os::OsString;
+    use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
     PathBuf::from(OsString::from_wide(s))
 }
