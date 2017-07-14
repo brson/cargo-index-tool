@@ -100,7 +100,16 @@ fn print_trevdeps(index: Option<&Path>) -> Result<()> {
 fn print_one_point_oh_crates(index: Option<&Path>) -> Result<()> {
     let index = load_index(index)?;
 
-    panic!()
+    for (name, infos) in index {
+        for info in infos {
+            if info.vers >= Version::parse("1.0.0").expect("") {
+                println!("{} {}", info.name, info.vers);
+                break;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn load_index(index: Option<&Path>) -> Result<Index> {
